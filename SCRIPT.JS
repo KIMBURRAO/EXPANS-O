@@ -1,23 +1,9 @@
-/*
- * Expansão do Foda-se (V04) - Criado por AmmieNyami, através de modificações ao script de
- *                             DarkMode e marcos10pc.
- *
- * Baseado no Expansão do Foda-se (V03) por DarkMode (https://github.com/DarkModde/Dark-Scripts).
- *
- * O Expansão do Foda-se (V03) do DarkMode foi, por sua vez, baseado na versão original criada
- * por marcos10pc (Ex. Noturna Cheeto).
- *
- * Comentário original do DarkMode:
- *
- *  // Script originalmente desenvolvido por marcos10pc ( Ex. Noturna Cheeto )
- *  // Eu apenas roubei ( ÓBVIO ), modifiquei, aprimorei
- *  // e também deixei mais bonito KKKK
- */
+// Script desenvolvido por marcos10pc ( Ex. Noturna Cheeto )
+// Eu apenas roubei ( ÓBVIO ), modifiquei, aprimorei
+// e também deixei mais bonito KKKK
 
-// Ainda utilizando o ProtectionScript do DarkMode
-const script = document.createElement("script");
-script.src =
-  "https://cdn.jsdelivr.net/gh/DarkModde/Dark-Scripts/ProtectionScript.js";
+const script = document.createElement('script');
+script.src = 'https://cdn.jsdelivr.net/gh/DarkModde/Dark-Scripts/ProtectionScript.js';
 document.head.appendChild(script);
 
 console.clear();
@@ -44,35 +30,31 @@ class UrlHelper {
 }
 
 class RequestManager {
-  constructor(baseUrl = "https://expansao.educacao.sp.gov.br", maxRetries = 3) {
+  constructor(baseUrl = 'https://expansao.educacao.sp.gov.br', maxRetries = 3) {
     this.baseUrl = baseUrl;
     this.maxRetries = maxRetries;
     this.defaultHeaders = {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "same-origin",
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin'
     };
   }
 
   async fetchWithRetry(url, options = {}, retries = this.maxRetries) {
-    const fullUrl = url.startsWith("http")
-      ? url
-      : UrlHelper.createUrl(this.baseUrl, url);
+    const fullUrl = url.startsWith('http') ? url : UrlHelper.createUrl(this.baseUrl, url);
     const response = await fetch(fullUrl, {
-      credentials: "include",
+      credentials: 'include',
       headers: this.defaultHeaders,
-      ...options,
+      ...options
     });
 
     if (!response.ok && retries > 0) {
       const delay = Math.pow(2, this.maxRetries - retries) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await new Promise(resolve => setTimeout(resolve, delay));
       return this.fetchWithRetry(url, options, retries - 1);
     }
     return response;
@@ -87,33 +69,29 @@ class ExamAutomator {
   async fetchExamPage(examUrl) {
     const response = await this.requestManager.fetchWithRetry(examUrl);
     const pageText = await response.text();
-    const contextId =
-      UrlHelper.extractUrlParam(examUrl, "id") ||
-      UrlHelper.extractByRegex(pageText, /contextInstanceId":(\d+)/);
+    const contextId = UrlHelper.extractUrlParam(examUrl, 'id') || 
+                     UrlHelper.extractByRegex(pageText, /contextInstanceId":(\d+)/);
     const sessKey = UrlHelper.extractByRegex(pageText, /sesskey":"([^"]+)/);
-
+    
     return { contextId, sessKey };
   }
 
   async startExamAttempt(contextId, sessKey) {
     const formData = new URLSearchParams({
       cmid: contextId,
-      sesskey: sessKey,
+      sesskey: sessKey
     });
 
-    const response = await this.requestManager.fetchWithRetry(
-      "/mod/quiz/startattempt.php",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-        redirect: "follow",
-      },
-    );
+    const response = await this.requestManager.fetchWithRetry('/mod/quiz/startattempt.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString(),
+      redirect: 'follow'
+    });
 
     const redirectUrl = response.url;
     const attemptId = UrlHelper.extractByRegex(redirectUrl, /attempt=(\d+)/);
-
+    
     return { redirectUrl, attemptId };
   }
 
@@ -129,10 +107,10 @@ class ExamAutomator {
       options: [],
       attempt: null,
       sesskey: null,
-      formFields: {},
+      formFields: {}
     };
 
-    htmlDoc.querySelectorAll("input[type='hidden']").forEach((input) => {
+    htmlDoc.querySelectorAll("input[type='hidden']").forEach(input => {
       const name = input.getAttribute("name");
       const value = input.getAttribute("value");
       if (!name) return;
@@ -144,16 +122,12 @@ class ExamAutomator {
         questionData.attempt = value;
       } else if (name === "sesskey") {
         questionData.sesskey = value;
-      } else if (
-        ["thispage", "nextpage", "timeup", "mdlscrollto", "slots"].includes(
-          name,
-        )
-      ) {
+      } else if (["thispage", "nextpage", "timeup", "mdlscrollto", "slots"].includes(name)) {
         questionData.formFields[name] = value;
       }
     });
 
-    htmlDoc.querySelectorAll("input[type='radio']").forEach((input) => {
+    htmlDoc.querySelectorAll("input[type='radio']").forEach(input => {
       const name = input.getAttribute("name");
       const value = input.getAttribute("value");
       if (name?.includes("_answer") && value !== "-1") {
@@ -165,17 +139,13 @@ class ExamAutomator {
   }
 
   async submitAnswer(questionData, contextId) {
-    const selectedOption =
-      questionData.options[
-        Math.floor(Math.random() * questionData.options.length)
-      ];
+    const selectedOption = questionData.options[
+      Math.floor(Math.random() * questionData.options.length)
+    ];
 
     const formData = new FormData();
     formData.append(`${questionData.questId}:1_:flagged`, "0");
-    formData.append(
-      `${questionData.questId}:1_:sequencecheck`,
-      questionData.seqCheck,
-    );
+    formData.append(`${questionData.questId}:1_:sequencecheck`, questionData.seqCheck);
     formData.append(selectedOption.name, selectedOption.value);
     formData.append("next", "Finalizar tentativa ...");
     formData.append("attempt", questionData.attempt);
@@ -190,19 +160,19 @@ class ExamAutomator {
     const response = await this.requestManager.fetchWithRetry(url, {
       method: "POST",
       body: formData,
-      redirect: "follow",
+      redirect: "follow"
     });
 
     return {
       redirectUrl: response.url,
       attemptId: questionData.attempt,
-      sesskey: questionData.sesskey,
+      sesskey: questionData.sesskey
     };
   }
 
   async finishExamAttempt(attemptId, contextId, sesskey) {
     await this.requestManager.fetchWithRetry(
-      `/mod/quiz/summary.php?attempt=${attemptId}&cmid=${contextId}`,
+      `/mod/quiz/summary.php?attempt=${attemptId}&cmid=${contextId}`
     );
 
     const formData = new URLSearchParams({
@@ -211,34 +181,25 @@ class ExamAutomator {
       timeup: "0",
       slots: "",
       cmid: contextId,
-      sesskey: sesskey,
+      sesskey: sesskey
     });
 
-    const response = await this.requestManager.fetchWithRetry(
-      "/mod/quiz/processattempt.php",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-        redirect: "follow",
-      },
-    );
+    const response = await this.requestManager.fetchWithRetry('/mod/quiz/processattempt.php', {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+      redirect: "follow"
+    });
 
     return response.url;
   }
 
   async completeExam(examUrl) {
     const { contextId, sessKey } = await this.fetchExamPage(examUrl);
-    const { redirectUrl, attemptId } = await this.startExamAttempt(
-      contextId,
-      sessKey,
-    );
+    const { redirectUrl, attemptId } = await this.startExamAttempt(contextId, sessKey);
     const questionData = await this.extractQuestionInfo(redirectUrl);
-    const { attemptId: finalAttemptId, sesskey } = await this.submitAnswer(
-      questionData,
-      contextId,
-    );
-
+    const { attemptId: finalAttemptId, sesskey } = await this.submitAnswer(questionData, contextId);
+    
     return await this.finishExamAttempt(finalAttemptId, contextId, sesskey);
   }
 }
@@ -256,7 +217,7 @@ class PageCompletionService {
 
 class NotificationManager {
   constructor() {
-    this.notificationContainer = document.createElement("div");
+    this.notificationContainer = document.createElement('div');
     this.notificationContainer.style.cssText = `
       position: fixed;
       top: 20px;
@@ -270,7 +231,7 @@ class NotificationManager {
   }
 
   injectStyles() {
-    const style = document.createElement("style");
+    const style = document.createElement('style');
     style.textContent = `
       @keyframes notificationSlideIn {
         0% { transform: translateX(100%); opacity: 0; }
@@ -294,9 +255,15 @@ class NotificationManager {
         overflow: hidden;
         border-left: 4px solid;
       }
-      .notification.success { border-left-color: #4CAF50; }
-      .notification.error { border-left-color: #F44336; }
-      .notification.info { border-left-color: #2196F3; }
+      .notification.success {
+        border-left-color: #4CAF50;
+      }
+      .notification.error {
+        border-left-color: #F44336;
+      }
+      .notification.info {
+        border-left-color: #2196F3;
+      }
       .notification::after {
         content: '';
         position: absolute;
@@ -306,10 +273,24 @@ class NotificationManager {
         height: 4px;
         background: linear-gradient(90deg, rgba(0,0,0,0.1), rgba(0,0,0,0));
       }
-      .notification-icon { width: 24px; height: 24px; margin-right: 15px; flex-shrink: 0; }
-      .notification-content { flex-grow: 1; }
-      .notification-title { font-weight: 600; margin-bottom: 5px; font-size: 15px; }
-      .notification-message { font-size: 14px; color: #555; }
+      .notification-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 15px;
+        flex-shrink: 0;
+      }
+      .notification-content {
+        flex-grow: 1;
+      }
+      .notification-title {
+        font-weight: 600;
+        margin-bottom: 5px;
+        font-size: 15px;
+      }
+      .notification-message {
+        font-size: 14px;
+        color: #555;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -317,4 +298,133 @@ class NotificationManager {
   getIcon(type) {
     const icons = {
       success: `<svg viewBox="0 0 24 24" fill="#4CAF50"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`,
-      error: `<svg viewBox="0 0 24 24" fill="#F44336"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2
+      error: `<svg viewBox="0 0 24 24" fill="#F44336"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`,
+      info: `<svg viewBox="0 0 24 24" fill="#2196F3"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>`
+    };
+    return icons[type] || icons.info;
+  }
+
+  showNotification(title, message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    notification.innerHTML = `
+      <div class="notification-icon">${this.getIcon(type)}</div>
+      <div class="notification-content">
+        <div class="notification-title">${title}</div>
+        <div class="notification-message">${message}</div>
+      </div>
+    `;
+
+    this.notificationContainer.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.style.animation = 'notificationFadeOut 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55)';
+      setTimeout(() => notification.remove(), 400);
+    }, 5000);
+  }
+}
+
+class ActivityProcessorUI {
+  constructor() {
+    this.examAutomator = new ExamAutomator();
+    this.pageCompletionService = new PageCompletionService();
+    this.notificationManager = new NotificationManager();
+    this.isProcessing = false;
+  }
+
+  async processActivities() {
+    if (this.isProcessing) {
+      this.notificationManager.showNotification('Aviso', 'O processamento já está em andamento.', 'info');
+      return;
+    }
+
+    this.isProcessing = true;
+    this.notificationManager.showNotification('Script Iniciado!', 'Expansão do foda-se iniciada com sucesso!', 'success');
+
+    try {
+      const activities = Array.from(document.querySelectorAll("li.activity"))
+        .filter(activity => {
+          const link = activity.querySelector("a.aalink");
+          const completionButton = activity.querySelector(".completion-dropdown button");
+          return link?.href && (!completionButton || !completionButton.classList.contains("btn-success"));
+        });
+
+      const simplePages = [];
+      const exams = [];
+
+      activities.forEach(activity => {
+        const link = activity.querySelector("a.aalink");
+        const url = new URL(link.href);
+        const pageId = url.searchParams.get("id");
+        const activityName = link.textContent.trim();
+
+        if (pageId) {
+          if (/responda|pause/i.test(activityName)) {
+            exams.push({ href: link.href, nome: activityName });
+          } else {
+            simplePages.push(pageId);
+          }
+        }
+      });
+
+      if (simplePages.length > 0) {
+        this.notificationManager.showNotification('Progresso', `Marcando ${simplePages.length} atividades como concluídas...`, 'info');
+        await Promise.all(simplePages.map(pageId => 
+          this.pageCompletionService.markPageAsCompleted(pageId)
+        ));
+      }
+
+      if (exams.length > 0) {
+        const totalExams = exams.length;
+        this.notificationManager.showNotification('Progresso', `Processando ${totalExams} exames...`, 'info');
+
+        for (let i = 0; i < totalExams; i++) {
+          const exam = exams[i];
+          this.notificationManager.showNotification('Exame', `Processando: "${exam.nome}" (${i + 1}/${totalExams})`, 'info');
+          
+          await this.examAutomator.completeExam(exam.href);
+
+          if (i < totalExams - 1) {
+            await new Promise(resolve => setTimeout(resolve, 20000));
+          }
+        }
+      }
+
+      if (simplePages.length === 0 && exams.length === 0) {
+        this.notificationManager.showNotification('Concluído', 'Nenhuma atividade pendente encontrada.', 'info');
+      } else {
+        this.notificationManager.showNotification('Sucesso', 'Processamento concluído com sucesso!', 'success');
+      }
+
+      setTimeout(() => {
+        this.notificationManager.showNotification('Finalizado', 'Atividades Finalizadas! | Caso Sobrar alguma execute novamente', 'success');
+        location.reload();
+      }, 1000);
+    } catch (error) {
+      this.notificationManager.showNotification('Erro', 'Ocorreu um erro durante o processamento', 'error');
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+}
+
+function initActivityProcessor() {
+  if (window.location.hostname !== 'expansao.educacao.sp.gov.br') {
+    const notification = new NotificationManager();
+    notification.showNotification('Erro', 'Este script só funciona no site da Expansão Educacional de SP', 'error');
+    return;
+  }
+
+  const processor = new ActivityProcessorUI();
+  
+  setTimeout(() => {
+    processor.processActivities();
+  }, 1000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initActivityProcessor);
+} else {
+  initActivityProcessor();
+}
