@@ -1,0 +1,191 @@
+// ===== CONFIGURAÇÃO =====
+const DELAY_BETWEEN_QUESTIONS = 20000; // tempo em milissegundos (8 seg por questão)
+// ========================
+
+// ProtectionScript
+const script = document.createElement("script");
+script.src = "https://cdn.jsdelivr.net/gh/DarkModde/Dark-Scripts/ProtectionScript.js";
+document.head.appendChild(script);
+
+console.clear();
+const noop = () => {};
+console.warn = console.error = window.debug = noop;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+class UrlHelper {
+    static extractUrlParam(url, paramName) {
+        return new URL(url).searchParams.get(paramName);
+    }
+    static extractByRegex(text, regex) {
+        const match = text.match(regex);
+        return match?.[1];
+    }
+    static createUrl(baseUrl, path, params = {}) {
+        const url = new URL(path, baseUrl);
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.append(key, value);
+        });
+        return url.toString();
+    }
+}
+
+class RequestManager {
+    constructor(baseUrl = "https://expansao.educacao.sp.gov.br", maxRetries = 3) {
+        this.baseUrl = baseUrl;
+        this.maxRetries = maxRetries;
+        this.defaultHeaders = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+        };
+    }
+
+    async fetchWithRetry(url, options = {}, retries = this.maxRetries) {
+        const fullUrl = url.startsWith("http") ? url : UrlHelper.createUrl(this.baseUrl, url);
+        const response = await fetch(fullUrl, {
+            credentials: "include",
+            headers: this.defaultHeaders,
+            ...options,
+        });
+
+        if (!response.ok && retries > 0) {
+            const delayTime = Math.pow(2, this.maxRetries - retries) * 1000;
+            await delay(delayTime);
+            return this.fetchWithRetry(url, options, retries - 1);
+        }
+        return response;
+    }
+}
+
+class ExamAutomator {
+    constructor() {
+        this.requestManager = new RequestManager();
+    }
+
+    async fetchExamPage(examUrl) {
+        const response = await this.requestManager.fetchWithRetry(examUrl);
+        const pageText = await response.text();
+        const contextId = UrlHelper.extractUrlParam(examUrl, "id") || UrlHelper.extractByRegex(pageText, /contextInstanceId":(\d+)/);
+        const sessKey = UrlHelper.extractByRegex(pageText, /sesskey":"([^"]+)/);
+        return { contextId, sessKey };
+    }
+
+    async startExamAttempt(contextId, sessKey) {
+        const formData = new URLSearchParams({ cmid: contextId, sesskey: sessKey });
+        const response = await this.requestManager.fetchWithRetry(
+            "/mod/quiz/startattempt.php",
+            { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formData.toString(), redirect: "follow" }
+        );
+        const redirectUrl = response.url;
+        const attemptId = UrlHelper.extractByRegex(redirectUrl, /attempt=(\d+)/);
+        return { redirectUrl, attemptId };
+    }
+
+    async extractQuestionInfo(questionUrl) {
+        const response = await this.requestManager.fetchWithRetry(questionUrl);
+        const pageText = await response.text();
+        const parser = new DOMParser();
+        const htmlDoc = parser.parseFromString(pageText, "text/html");
+
+        const questionData = {
+            questId: null,
+            seqCheck: null,
+            options: [],
+            attempt: null,
+            sesskey: null,
+            formFields: {},
+            nextPageUrl: null,
+        };
+
+        htmlDoc.querySelectorAll("input[type='hidden']").forEach((input) => {
+            const name = input.getAttribute("name");
+            const value = input.getAttribute("value");
+            if (!name) return;
+            if (name.includes(":sequencecheck")) {
+                questionData.questId = name.split(":")[0];
+                questionData.seqCheck = value;
+            } else if (name === "attempt") {
+                questionData.attempt = value;
+            } else if (name === "sesskey") {
+                questionData.sesskey = value;
+            } else if (["thispage", "nextpage", "timeup", "mdlscrollto", "slots"].includes(name)) {
+                questionData.formFields[name] = value;
+            }
+        });
+
+        htmlDoc.querySelectorAll("input[type='radio']").forEach((input) => {
+            const name = input.getAttribute("name");
+            const value = input.getAttribute("value");
+            if (name?.includes("_answer") && value !== "-1") {
+                questionData.options.push({ name, value });
+            }
+        });
+
+        const nextLink = htmlDoc.querySelector('input[name="next"]');
+        if (nextLink && nextLink.value.includes("Próxima")) {
+            questionData.nextPageUrl = `/mod/quiz/attempt.php?attempt=${questionData.attempt}&page=${parseInt(questionData.formFields.thispage) + 1}`;
+        }
+
+        return questionData;
+    }
+
+    async submitAnswer(questionData, contextId) {
+        const selectedOption = questionData.options[Math.floor(Math.random() * questionData.options.length)];
+        await delay(DELAY_BETWEEN_QUESTIONS); // Aguarda antes de responder
+
+        const formData = new FormData();
+        formData.append(`${questionData.questId}:1_:flagged`, "0");
+        formData.append(`${questionData.questId}:1_:sequencecheck`, questionData.seqCheck);
+        formData.append(selectedOption.name, selectedOption.value);
+        formData.append("next", questionData.nextPageUrl ? "Próxima" : "Finalizar tentativa ...");
+        formData.append("attempt", questionData.attempt);
+        formData.append("sesskey", questionData.sesskey);
+        formData.append("slots", "1");
+        Object.entries(questionData.formFields).forEach(([key, value]) => {
+            formData.append(key, value);
+        });
+
+        const url = `/mod/quiz/processattempt.php?cmid=${contextId}`;
+        const response = await this.requestManager.fetchWithRetry(url, { method: "POST", body: formData, redirect: "follow" });
+        return { redirectUrl: response.url, attemptId: questionData.attempt, sesskey: questionData.sesskey };
+    }
+
+    async finishExamAttempt(attemptId, contextId, sesskey) {
+        await this.requestManager.fetchWithRetry(`/mod/quiz/summary.php?attempt=${attemptId}&cmid=${contextId}`);
+        const formData = new URLSearchParams({ attempt: attemptId, finishattempt: "1", timeup: "0", slots: "", cmid: contextId, sesskey: sesskey });
+        const response = await this.requestManager.fetchWithRetry("/mod/quiz/processattempt.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formData.toString(),
+            redirect: "follow",
+        });
+        return response.url;
+    }
+
+    async completeExam(examUrl) {
+        const { contextId, sessKey } = await this.fetchExamPage(examUrl);
+        const { redirectUrl, attemptId } = await this.startExamAttempt(contextId, sessKey);
+
+        let currentUrl = redirectUrl;
+        let lastSessKey = sessKey;
+        let lastAttemptId = attemptId;
+
+        while (true) {
+            const questionData = await this.extractQuestionInfo(currentUrl);
+            const submitResult = await this.submitAnswer(questionData, contextId);
+            lastSessKey = submitResult.sesskey;
+            lastAttemptId = submitResult.attemptId;
+            if (!questionData.nextPageUrl) break;
+            currentUrl = questionData.nextPageUrl;
+        }
+
+        return await this.finishExamAttempt(lastAttemptId, contextId, lastSessKey);
+    }
+}
+
+// Restante do script (PageCompletionService, NotificationManager, ActivityProcessorUI, initActivityProcessor) é igual ao seu original.
