@@ -223,7 +223,7 @@
         );
         const questionData = await this.extractQuestionInfo(redirectUrl);
 
-        const questionWait = getRandomDelay(30, 50);
+        const questionWait = getRandomDelay(75, 120);
         console.log(`Aguardando ${questionWait / 1000} segundos para responder a questão...`);
         await new Promise(resolve => setTimeout(resolve, questionWait));
 
