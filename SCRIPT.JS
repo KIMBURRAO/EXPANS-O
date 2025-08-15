@@ -1,191 +1,320 @@
-// ===== CONFIGURAÇÃO =====
-const DELAY_BETWEEN_QUESTIONS = 20000; // tempo em milissegundos (8 seg por questão)
-// ========================
+/*
+ * Expansão do Foda-se (V04) - Criado por AmmieNyami, através de modificações ao script de
+ *                             DarkMode e marcos10pc.
+ *
+ * Baseado no Expansão do Foda-se (V03) por DarkMode (https://github.com/DarkModde/Dark-Scripts).
+ *
+ * O Expansão do Foda-se (V03) do DarkMode foi, por sua vez, baseado na versão original criada
+ * por marcos10pc (Ex. Noturna Cheeto).
+ *
+ * Comentário original do DarkMode:
+ *
+ *  // Script originalmente desenvolvido por marcos10pc ( Ex. Noturna Cheeto )
+ *  // Eu apenas roubei ( ÓBVIO ), modifiquei, aprimorei
+ *  // e também deixei mais bonito KKKK
+ */
 
-// ProtectionScript
+// Ainda utilizando o ProtectionScript do DarkMode
 const script = document.createElement("script");
-script.src = "https://cdn.jsdelivr.net/gh/DarkModde/Dark-Scripts/ProtectionScript.js";
+script.src =
+  "https://cdn.jsdelivr.net/gh/DarkModde/Dark-Scripts/ProtectionScript.js";
 document.head.appendChild(script);
 
 console.clear();
 const noop = () => {};
 console.warn = console.error = window.debug = noop;
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 class UrlHelper {
-    static extractUrlParam(url, paramName) {
-        return new URL(url).searchParams.get(paramName);
-    }
-    static extractByRegex(text, regex) {
-        const match = text.match(regex);
-        return match?.[1];
-    }
-    static createUrl(baseUrl, path, params = {}) {
-        const url = new URL(path, baseUrl);
-        Object.entries(params).forEach(([key, value]) => {
-            url.searchParams.append(key, value);
-        });
-        return url.toString();
-    }
+  static extractUrlParam(url, paramName) {
+    return new URL(url).searchParams.get(paramName);
+  }
+
+  static extractByRegex(text, regex) {
+    const match = text.match(regex);
+    return match?.[1];
+  }
+
+  static createUrl(baseUrl, path, params = {}) {
+    const url = new URL(path, baseUrl);
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.append(key, value);
+    });
+    return url.toString();
+  }
 }
 
 class RequestManager {
-    constructor(baseUrl = "https://expansao.educacao.sp.gov.br", maxRetries = 3) {
-        this.baseUrl = baseUrl;
-        this.maxRetries = maxRetries;
-        this.defaultHeaders = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
-        };
-    }
+  constructor(baseUrl = "https://expansao.educacao.sp.gov.br", maxRetries = 3) {
+    this.baseUrl = baseUrl;
+    this.maxRetries = maxRetries;
+    this.defaultHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Upgrade-Insecure-Requests": "1",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+    };
+  }
 
-    async fetchWithRetry(url, options = {}, retries = this.maxRetries) {
-        const fullUrl = url.startsWith("http") ? url : UrlHelper.createUrl(this.baseUrl, url);
-        const response = await fetch(fullUrl, {
-            credentials: "include",
-            headers: this.defaultHeaders,
-            ...options,
-        });
+  async fetchWithRetry(url, options = {}, retries = this.maxRetries) {
+    const fullUrl = url.startsWith("http")
+      ? url
+      : UrlHelper.createUrl(this.baseUrl, url);
+    const response = await fetch(fullUrl, {
+      credentials: "include",
+      headers: this.defaultHeaders,
+      ...options,
+    });
 
-        if (!response.ok && retries > 0) {
-            const delayTime = Math.pow(2, this.maxRetries - retries) * 1000;
-            await delay(delayTime);
-            return this.fetchWithRetry(url, options, retries - 1);
-        }
-        return response;
+    if (!response.ok && retries > 0) {
+      const delay = Math.pow(2, this.maxRetries - retries) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return this.fetchWithRetry(url, options, retries - 1);
     }
+    return response;
+  }
 }
 
 class ExamAutomator {
-    constructor() {
-        this.requestManager = new RequestManager();
-    }
+  constructor() {
+    this.requestManager = new RequestManager();
+  }
 
-    async fetchExamPage(examUrl) {
-        const response = await this.requestManager.fetchWithRetry(examUrl);
-        const pageText = await response.text();
-        const contextId = UrlHelper.extractUrlParam(examUrl, "id") || UrlHelper.extractByRegex(pageText, /contextInstanceId":(\d+)/);
-        const sessKey = UrlHelper.extractByRegex(pageText, /sesskey":"([^"]+)/);
-        return { contextId, sessKey };
-    }
+  async fetchExamPage(examUrl) {
+    const response = await this.requestManager.fetchWithRetry(examUrl);
+    const pageText = await response.text();
+    const contextId =
+      UrlHelper.extractUrlParam(examUrl, "id") ||
+      UrlHelper.extractByRegex(pageText, /contextInstanceId":(\d+)/);
+    const sessKey = UrlHelper.extractByRegex(pageText, /sesskey":"([^"]+)/);
 
-    async startExamAttempt(contextId, sessKey) {
-        const formData = new URLSearchParams({ cmid: contextId, sesskey: sessKey });
-        const response = await this.requestManager.fetchWithRetry(
-            "/mod/quiz/startattempt.php",
-            { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formData.toString(), redirect: "follow" }
-        );
-        const redirectUrl = response.url;
-        const attemptId = UrlHelper.extractByRegex(redirectUrl, /attempt=(\d+)/);
-        return { redirectUrl, attemptId };
-    }
+    return { contextId, sessKey };
+  }
 
-    async extractQuestionInfo(questionUrl) {
-        const response = await this.requestManager.fetchWithRetry(questionUrl);
-        const pageText = await response.text();
-        const parser = new DOMParser();
-        const htmlDoc = parser.parseFromString(pageText, "text/html");
+  async startExamAttempt(contextId, sessKey) {
+    const formData = new URLSearchParams({
+      cmid: contextId,
+      sesskey: sessKey,
+    });
 
-        const questionData = {
-            questId: null,
-            seqCheck: null,
-            options: [],
-            attempt: null,
-            sesskey: null,
-            formFields: {},
-            nextPageUrl: null,
-        };
+    const response = await this.requestManager.fetchWithRetry(
+      "/mod/quiz/startattempt.php",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString(),
+        redirect: "follow",
+      },
+    );
 
-        htmlDoc.querySelectorAll("input[type='hidden']").forEach((input) => {
-            const name = input.getAttribute("name");
-            const value = input.getAttribute("value");
-            if (!name) return;
-            if (name.includes(":sequencecheck")) {
-                questionData.questId = name.split(":")[0];
-                questionData.seqCheck = value;
-            } else if (name === "attempt") {
-                questionData.attempt = value;
-            } else if (name === "sesskey") {
-                questionData.sesskey = value;
-            } else if (["thispage", "nextpage", "timeup", "mdlscrollto", "slots"].includes(name)) {
-                questionData.formFields[name] = value;
-            }
-        });
+    const redirectUrl = response.url;
+    const attemptId = UrlHelper.extractByRegex(redirectUrl, /attempt=(\d+)/);
 
-        htmlDoc.querySelectorAll("input[type='radio']").forEach((input) => {
-            const name = input.getAttribute("name");
-            const value = input.getAttribute("value");
-            if (name?.includes("_answer") && value !== "-1") {
-                questionData.options.push({ name, value });
-            }
-        });
+    return { redirectUrl, attemptId };
+  }
 
-        const nextLink = htmlDoc.querySelector('input[name="next"]');
-        if (nextLink && nextLink.value.includes("Próxima")) {
-            questionData.nextPageUrl = `/mod/quiz/attempt.php?attempt=${questionData.attempt}&page=${parseInt(questionData.formFields.thispage) + 1}`;
-        }
+  async extractQuestionInfo(questionUrl) {
+    const response = await this.requestManager.fetchWithRetry(questionUrl);
+    const pageText = await response.text();
+    const parser = new DOMParser();
+    const htmlDoc = parser.parseFromString(pageText, "text/html");
 
-        return questionData;
-    }
+    const questionData = {
+      questId: null,
+      seqCheck: null,
+      options: [],
+      attempt: null,
+      sesskey: null,
+      formFields: {},
+    };
 
-    async submitAnswer(questionData, contextId) {
-        const selectedOption = questionData.options[Math.floor(Math.random() * questionData.options.length)];
-        await delay(DELAY_BETWEEN_QUESTIONS); // Aguarda antes de responder
+    htmlDoc.querySelectorAll("input[type='hidden']").forEach((input) => {
+      const name = input.getAttribute("name");
+      const value = input.getAttribute("value");
+      if (!name) return;
 
-        const formData = new FormData();
-        formData.append(`${questionData.questId}:1_:flagged`, "0");
-        formData.append(`${questionData.questId}:1_:sequencecheck`, questionData.seqCheck);
-        formData.append(selectedOption.name, selectedOption.value);
-        formData.append("next", questionData.nextPageUrl ? "Próxima" : "Finalizar tentativa ...");
-        formData.append("attempt", questionData.attempt);
-        formData.append("sesskey", questionData.sesskey);
-        formData.append("slots", "1");
-        Object.entries(questionData.formFields).forEach(([key, value]) => {
-            formData.append(key, value);
-        });
+      if (name.includes(":sequencecheck")) {
+        questionData.questId = name.split(":")[0];
+        questionData.seqCheck = value;
+      } else if (name === "attempt") {
+        questionData.attempt = value;
+      } else if (name === "sesskey") {
+        questionData.sesskey = value;
+      } else if (
+        ["thispage", "nextpage", "timeup", "mdlscrollto", "slots"].includes(
+          name,
+        )
+      ) {
+        questionData.formFields[name] = value;
+      }
+    });
 
-        const url = `/mod/quiz/processattempt.php?cmid=${contextId}`;
-        const response = await this.requestManager.fetchWithRetry(url, { method: "POST", body: formData, redirect: "follow" });
-        return { redirectUrl: response.url, attemptId: questionData.attempt, sesskey: questionData.sesskey };
-    }
+    htmlDoc.querySelectorAll("input[type='radio']").forEach((input) => {
+      const name = input.getAttribute("name");
+      const value = input.getAttribute("value");
+      if (name?.includes("_answer") && value !== "-1") {
+        questionData.options.push({ name, value });
+      }
+    });
 
-    async finishExamAttempt(attemptId, contextId, sesskey) {
-        await this.requestManager.fetchWithRetry(`/mod/quiz/summary.php?attempt=${attemptId}&cmid=${contextId}`);
-        const formData = new URLSearchParams({ attempt: attemptId, finishattempt: "1", timeup: "0", slots: "", cmid: contextId, sesskey: sesskey });
-        const response = await this.requestManager.fetchWithRetry("/mod/quiz/processattempt.php", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData.toString(),
-            redirect: "follow",
-        });
-        return response.url;
-    }
+    return questionData;
+  }
 
-    async completeExam(examUrl) {
-        const { contextId, sessKey } = await this.fetchExamPage(examUrl);
-        const { redirectUrl, attemptId } = await this.startExamAttempt(contextId, sessKey);
+  async submitAnswer(questionData, contextId) {
+    const selectedOption =
+      questionData.options[
+        Math.floor(Math.random() * questionData.options.length)
+      ];
 
-        let currentUrl = redirectUrl;
-        let lastSessKey = sessKey;
-        let lastAttemptId = attemptId;
+    const formData = new FormData();
+    formData.append(`${questionData.questId}:1_:flagged`, "0");
+    formData.append(
+      `${questionData.questId}:1_:sequencecheck`,
+      questionData.seqCheck,
+    );
+    formData.append(selectedOption.name, selectedOption.value);
+    formData.append("next", "Finalizar tentativa ...");
+    formData.append("attempt", questionData.attempt);
+    formData.append("sesskey", questionData.sesskey);
+    formData.append("slots", "1");
 
-        while (true) {
-            const questionData = await this.extractQuestionInfo(currentUrl);
-            const submitResult = await this.submitAnswer(questionData, contextId);
-            lastSessKey = submitResult.sesskey;
-            lastAttemptId = submitResult.attemptId;
-            if (!questionData.nextPageUrl) break;
-            currentUrl = questionData.nextPageUrl;
-        }
+    Object.entries(questionData.formFields).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
 
-        return await this.finishExamAttempt(lastAttemptId, contextId, lastSessKey);
-    }
+    const url = `/mod/quiz/processattempt.php?cmid=${contextId}`;
+    const response = await this.requestManager.fetchWithRetry(url, {
+      method: "POST",
+      body: formData,
+      redirect: "follow",
+    });
+
+    return {
+      redirectUrl: response.url,
+      attemptId: questionData.attempt,
+      sesskey: questionData.sesskey,
+    };
+  }
+
+  async finishExamAttempt(attemptId, contextId, sesskey) {
+    await this.requestManager.fetchWithRetry(
+      `/mod/quiz/summary.php?attempt=${attemptId}&cmid=${contextId}`,
+    );
+
+    const formData = new URLSearchParams({
+      attempt: attemptId,
+      finishattempt: "1",
+      timeup: "0",
+      slots: "",
+      cmid: contextId,
+      sesskey: sesskey,
+    });
+
+    const response = await this.requestManager.fetchWithRetry(
+      "/mod/quiz/processattempt.php",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString(),
+        redirect: "follow",
+      },
+    );
+
+    return response.url;
+  }
+
+  async completeExam(examUrl) {
+    const { contextId, sessKey } = await this.fetchExamPage(examUrl);
+    const { redirectUrl, attemptId } = await this.startExamAttempt(
+      contextId,
+      sessKey,
+    );
+    const questionData = await this.extractQuestionInfo(redirectUrl);
+    const { attemptId: finalAttemptId, sesskey } = await this.submitAnswer(
+      questionData,
+      contextId,
+    );
+
+    return await this.finishExamAttempt(finalAttemptId, contextId, sesskey);
+  }
 }
 
-// Restante do script (PageCompletionService, NotificationManager, ActivityProcessorUI, initActivityProcessor) é igual ao seu original.
+class PageCompletionService {
+  constructor() {
+    this.requestManager = new RequestManager();
+  }
+
+  async markPageAsCompleted(pageId) {
+    const url = `/mod/resource/view.php?id=${pageId}`;
+    await this.requestManager.fetchWithRetry(url);
+  }
+}
+
+class NotificationManager {
+  constructor() {
+    this.notificationContainer = document.createElement("div");
+    this.notificationContainer.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      max-width: 350px;
+      font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    `;
+    document.body.appendChild(this.notificationContainer);
+    this.injectStyles();
+  }
+
+  injectStyles() {
+    const style = document.createElement("style");
+    style.textContent = `
+      @keyframes notificationSlideIn {
+        0% { transform: translateX(100%); opacity: 0; }
+        100% { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes notificationFadeOut {
+        0% { transform: translateX(0); opacity: 1; }
+        100% { transform: translateX(100%); opacity: 0; }
+      }
+      .notification {
+        background: #fff;
+        color: #333;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: notificationSlideIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        display: flex;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+        border-left: 4px solid;
+      }
+      .notification.success { border-left-color: #4CAF50; }
+      .notification.error { border-left-color: #F44336; }
+      .notification.info { border-left-color: #2196F3; }
+      .notification::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, rgba(0,0,0,0.1), rgba(0,0,0,0));
+      }
+      .notification-icon { width: 24px; height: 24px; margin-right: 15px; flex-shrink: 0; }
+      .notification-content { flex-grow: 1; }
+      .notification-title { font-weight: 600; margin-bottom: 5px; font-size: 15px; }
+      .notification-message { font-size: 14px; color: #555; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  getIcon(type) {
+    const icons = {
+      success: `<svg viewBox="0 0 24 24" fill="#4CAF50"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`,
+      error: `<svg viewBox="0 0 24 24" fill="#F44336"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2
