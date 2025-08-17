@@ -183,8 +183,13 @@
     }
 
     class PageCompletionService {
-        constructor() { this.requestManager = new RequestManager(); }
-        async markPageAsCompleted(pageId) { await this.requestManager.fetchWithRetry(`/mod/resource/view.php?id=${pageId}`); }
+        constructor() { 
+            this.requestManager = new RequestManager(); 
+        }
+        
+        async markPageAsCompleted(pageId) { 
+            await this.requestManager.fetchWithRetry(`/mod/resource/view.php?id=${pageId}`); 
+        }
     }
 
     class NotificationManager {
@@ -205,16 +210,56 @@
         injectStyles() {
             const style = document.createElement("style");
             style.textContent = `
-                @keyframes notificationSlideIn { 0% { transform: translateX(100%); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
-                @keyframes notificationFadeOut { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
-                .notification { background: #fff; color: #333; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: notificationSlideIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); display: flex; align-items: center; position: relative; overflow: hidden; border-left: 4px solid; }
+                @keyframes notificationSlideIn { 
+                    0% { transform: translateX(100%); opacity: 0; } 
+                    100% { transform: translateX(0); opacity: 1; } 
+                }
+                @keyframes notificationFadeOut { 
+                    0% { transform: translateX(0); opacity: 1; } 
+                    100% { transform: translateX(100%); opacity: 0; } 
+                }
+                .notification { 
+                    background: #fff; 
+                    color: #333; 
+                    padding: 15px; 
+                    margin-bottom: 15px; 
+                    border-radius: 8px; 
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+                    animation: notificationSlideIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); 
+                    display: flex; 
+                    align-items: center; 
+                    position: relative; 
+                    overflow: hidden; 
+                    border-left: 4px solid; 
+                }
                 .notification.success { border-left-color: #4CAF50; }
                 .notification.error { border-left-color: #F44336; }
                 .notification.info { border-left-color: #2196F3; }
-                .notification-icon { width: 24px; height: 24px; margin-right: 15px; flex-shrink: 0; }
+                .notification::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 4px;
+                    background: linear-gradient(90deg, rgba(0,0,0,0.1), rgba(0,0,0,0));
+                }
+                .notification-icon { 
+                    width: 24px; 
+                    height: 24px; 
+                    margin-right: 15px; 
+                    flex-shrink: 0; 
+                }
                 .notification-content { flex-grow: 1; }
-                .notification-title { font-weight: 600; margin-bottom: 5px; font-size: 15px; }
-                .notification-message { font-size: 14px; color: #555; }
+                .notification-title { 
+                    font-weight: 600; 
+                    margin-bottom: 5px; 
+                    font-size: 15px; 
+                }
+                .notification-message { 
+                    font-size: 14px; 
+                    color: #555; 
+                }
             `;
             document.head.appendChild(style);
         }
@@ -231,4 +276,231 @@
         showNotification(title, message, type = "info") {
             const notification = document.createElement("div");
             notification.className = `notification ${type}`;
-            notification.innerHTML = `<div class="notification-icon">${this.getIcon(type)}</div><div class="notification-content"><div class="
+            notification.innerHTML = `
+                <div class="notification-icon">${this.getIcon(type)}</div>
+                <div class="notification-content">
+                    <div class="notification-title">${title}</div>
+                    <div class="notification-message">${message}</div>
+                </div>
+            `;
+
+            this.notificationContainer.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = "notificationFadeOut 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55)";
+                setTimeout(() => notification.remove(), 400);
+            }, 5000);
+        }
+    }
+
+    class ActivityProcessorUI {
+        constructor(courseId) {
+            this.requestManager = new RequestManager();
+            this.examAutomator = new ExamAutomator();
+            this.pageCompletionService = new PageCompletionService();
+            this.notificationManager = new NotificationManager();
+
+            this.courseId = courseId;
+            this.isProcessing = false;
+
+            this.notificationManager.showNotification(
+                "Script Iniciado!",
+                "Expansão do foda-se iniciada com sucesso!",
+                "success"
+            );
+        }
+
+        async processActivities() {
+            if (this.isProcessing) {
+                this.notificationManager.showNotification(
+                    "Aviso",
+                    "O processamento já está em andamento.",
+                    "info"
+                );
+                return;
+            }
+
+            this.isProcessing = true;
+            try {
+                let coursePageDom = await this.requestManager
+                    .fetchWithRetry(`/course/view.php?id=${this.courseId}`)
+                    .then((response) => {
+                        if (!response.ok) {
+                            this.notificationManager.showNotification(
+                                "Erro",
+                                "Não foi possível carregar o curso",
+                                "error"
+                            );
+                            throw new Error("Unable to load course page");
+                        }
+                        return response.text();
+                    })
+                    .then((html) => {
+                        const parser = new DOMParser();
+                        return parser.parseFromString(html, "text/html");
+                    });
+
+                const activities = Array.from(
+                    coursePageDom.querySelectorAll(
+                        "li.activity.modtype_resource, li.activity.modtype_quiz"
+                    )
+                ).filter((activity) => {
+                    const completionButton = activity.querySelector(".completion-dropdown button");
+                    const link = activity.querySelector("a.aalink");
+                    return (
+                        link?.href &&
+                        (!completionButton || !completionButton.classList.contains("btn-success"))
+                    );
+                });
+
+                const simplePages = [];
+                const exams = [];
+
+                activities.forEach((activity) => {
+                    const link = activity.querySelector("a.aalink");
+                    const url = new URL(link.href);
+                    const pageId = url.searchParams.get("id");
+                    const activityName = link.textContent.trim();
+
+                    if (pageId) {
+                        if (/responda|pause/i.test(activityName)) {
+                            exams.push({ href: link.href, nome: activityName });
+                        } else {
+                            simplePages.push(pageId);
+                        }
+                    }
+                });
+
+                if (simplePages.length === 0 && exams.length === 0) {
+                    this.notificationManager.showNotification(
+                        "Finalizado",
+                        "Atividades Finalizadas! | Caso Sobrar alguma execute novamente",
+                        "success"
+                    );
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                    return;
+                }
+
+                if (simplePages.length > 0) {
+                    this.notificationManager.showNotification(
+                        "Progresso",
+                        `Marcando ${simplePages.length} atividades como concluídas...`,
+                        "info"
+                    );
+                    
+                    // Processa páginas simples com delay aleatório
+                    for (const pageId of simplePages) {
+                        const pageWait = getRandomDelay(2, 5); // 2 a 5 segundos
+                        console.log(`Aguardando ${pageWait / 1000} segundos para próxima página...`);
+                        await new Promise(resolve => setTimeout(resolve, pageWait));
+                        await this.pageCompletionService.markPageAsCompleted(pageId);
+                    }
+                }
+
+                if (exams.length > 0) {
+                    const totalExams = exams.length;
+                    this.notificationManager.showNotification(
+                        "Progresso",
+                        `Processando ${totalExams} exames...`,
+                        "info"
+                    );
+
+                    for (let i = 0; i < totalExams; i++) {
+                        const exam = exams[i];
+                        this.notificationManager.showNotification(
+                            "Exame",
+                            `Processando: "${exam.nome}" (${i + 1}/${totalExams})`,
+                            "info"
+                        );
+
+                        await this.examAutomator.completeExam(exam.href);
+
+                        if (i < totalExams - 1) {
+                            // Delay entre exames: 3 a 5 minutos
+                            const examWait = getRandomDelay(180, 300);
+                            console.log(`Aguardando ${examWait / 1000} segundos para próximo exame...`);
+                            await new Promise((resolve) => setTimeout(resolve, examWait));
+                        }
+                    }
+                }
+
+                this.notificationManager.showNotification(
+                    "Sucesso",
+                    "Processamento concluído com sucesso!",
+                    "success"
+                );
+
+                this.notificationManager.showNotification(
+                    "Atividades Restantes",
+                    "Tentando encontrar atividades restantes",
+                    "info"
+                );
+                this.isProcessing = false;
+                
+                // Delay antes de verificar atividades restantes
+                const checkWait = getRandomDelay(10, 20); // 10 a 20 segundos
+                console.log(`Aguardando ${checkWait / 1000} segundos para verificar atividades restantes...`);
+                await new Promise(resolve => setTimeout(resolve, checkWait));
+                
+                return this.processActivities();
+            } catch (error) {
+                console.error('Erro durante processamento:', error);
+                this.notificationManager.showNotification(
+                    "Erro",
+                    "Ocorreu um erro durante o processamento",
+                    "error"
+                );
+            } finally {
+                this.isProcessing = false;
+            }
+        }
+    }
+
+    function initActivityProcessor() {
+        if (window.location.hostname !== "expansao.educacao.sp.gov.br") {
+            const notification = new NotificationManager();
+            notification.showNotification(
+                "Erro",
+                "Este script só funciona no site da Expansão Educacional de SP",
+                "error"
+            );
+            return;
+        }
+
+        if (window.location.pathname !== "/course/view.php") {
+            const notification = new NotificationManager();
+            notification.showNotification(
+                "Erro",
+                "Por favor selecione um curso antes de executar o script",
+                "error"
+            );
+            return;
+        }
+
+        const courseId = new URLSearchParams(window.location.search).get("id");
+        if (!courseId) {
+            const notification = new NotificationManager();
+            notification.showNotification(
+                "Erro",
+                "ID do curso não encontrado na URL",
+                "error"
+            );
+            return;
+        }
+
+        const processor = new ActivityProcessorUI(courseId);
+
+        setTimeout(() => {
+            processor.processActivities();
+        }, 1000);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initActivityProcessor);
+    } else {
+        initActivityProcessor();
+    }
+
+})();
