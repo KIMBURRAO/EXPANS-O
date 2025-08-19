@@ -448,7 +448,7 @@ class ExamAutomator {
 
 
 
-    const questionWait = getRandomDelay(50, 120);
+    const questionWait = getRandomDelay(90, 120);
 
     console.log(`Aguardando ${questionWait / 1000} segundos para responder a questão...`);
 
