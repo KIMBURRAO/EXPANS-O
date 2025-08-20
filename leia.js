@@ -45,71 +45,69 @@
         });
     }
     
-    // Função para encontrar o botão específico da Árvore (SOMENTE PRÓXIMA PÁGINA)
+    // Função para encontrar APENAS o botão de próxima página (direita)
     function findNavigationButtons() {
-        // Primeiro, tenta o seletor específico do botão de PRÓXIMA página
-        const nextPageSelectors = [
-            'span[data-testid="bonsai-icon-caret-right"]',
-            '[data-testid="bonsai-icon-caret-right"]'
-        ];
+        // Busca TODOS os botões com caret e filtra o mais à DIREITA
+        const caretRightButtons = [];
         
-        for (let selector of nextPageSelectors) {
-            const element = document.querySelector(selector);
-            if (element) {
-                const button = element.closest('button');
-                if (button && !button.disabled && button.offsetParent !== null) {
-                    console.log('✅ Botão PRÓXIMA encontrado via:', selector);
-                    return button;
-                }
+        // Primeiro, coleta todos os botões com caret-right
+        const caretRightSpans = document.querySelectorAll('span[data-testid="bonsai-icon-caret-right"]');
+        
+        caretRightSpans.forEach(span => {
+            const button = span.closest('button');
+            if (button && !button.disabled && button.offsetParent !== null) {
+                const rect = button.getBoundingClientRect();
+                caretRightButtons.push({
+                    button: button,
+                    x: rect.left,
+                    rect: rect
+                });
             }
+        });
+        
+        if (caretRightButtons.length === 0) {
+            console.log('❌ Nenhum botão caret-right encontrado');
+            return null;
         }
         
-        // Busca por todos os spans com caret e filtra apenas RIGHT
-        const caretSpans = document.querySelectorAll('span[data-testid*="caret"]');
-        for (let span of caretSpans) {
-            // IMPORTANTE: só aceita caret-RIGHT
-            if (span.getAttribute('data-testid') === 'bonsai-icon-caret-right') {
-                const button = span.closest('button');
-                if (button && !button.disabled && button.offsetParent !== null) {
-                    console.log('✅ Botão PRÓXIMA encontrado via caret-right span');
-                    return button;
-                }
-            }
+        // Se há apenas um botão caret-right, usa ele
+        if (caretRightButtons.length === 1) {
+            console.log('✅ Único botão caret-right encontrado');
+            return caretRightButtons[0].button;
         }
         
-        // Busca por posição: botão do lado DIREITO da tela
-        const allButtons = document.querySelectorAll('button');
-        const screenWidth = window.innerWidth;
-        let rightmostButton = null;
-        let rightmostPosition = 0;
+        // Se há múltiplos, pega o mais à DIREITA (maior posição X)
+        caretRightButtons.sort((a, b) => b.x - a.x);
+        const rightmostButton = caretRightButtons[0];
         
-        for (let btn of allButtons) {
-            const rect = btn.getBoundingClientRect();
-            const isVisible = rect.width > 0 && rect.height > 0 && btn.offsetParent !== null;
-            const hasCaretIcon = btn.innerHTML.includes('caret-right');
-            
-            // Verifica se está na metade direita da tela E tem ícone caret-right
-            if (isVisible && rect.left > screenWidth * 0.5 && hasCaretIcon && rect.left > rightmostPosition) {
-                rightmostButton = btn;
-                rightmostPosition = rect.left;
-            }
-        }
+        console.log(`✅ Botão mais à direita selecionado (X: ${rightmostButton.x})`);
+        console.log('Debug - Todos os botões caret-right:');
+        caretRightButtons.forEach((item, index) => {
+            console.log(`  ${index}: X=${item.x}, Width=${item.rect.width}`);
+        });
         
-        if (rightmostButton) {
-            console.log('✅ Botão PRÓXIMA encontrado por posição direita');
-            return rightmostButton;
-        }
-        
-        console.log('❌ Botão de PRÓXIMA página não encontrado');
-        return null;
+        return rightmostButton.button;
     }
     
-    // Função para virar página
+    // Função para virar página (com verificação extra)
     async function turnPage() {
         try {
             const nextButton = findNavigationButtons();
             
             if (nextButton) {
+                // VERIFICAÇÃO FINAL: garantir que é realmente o botão da direita
+                const rect = nextButton.getBoundingClientRect();
+                const screenWidth = window.innerWidth;
+                const isOnRightSide = rect.left > screenWidth * 0.5;
+                
+                if (!isOnRightSide) {
+                    console.log('⚠️ Botão não está do lado direito da tela - cancelando');
+                    return false;
+                }
+                
+                // Aguarda um pouco para garantir estabilidade
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
                 // Simula clique real
                 nextButton.focus();
                 nextButton.click();
@@ -123,24 +121,19 @@
                 nextButton.dispatchEvent(clickEvent);
                 
                 currentPage++;
-                console.log(`Página ${currentPage} - Navegação executada`);
+                console.log(`✅ Página ${currentPage} - Avançou (X: ${rect.left})`);
                 updateControlPanel();
                 
                 // Aguarda o carregamento da nova página
                 await new Promise(resolve => setTimeout(resolve, config.waitForLoad));
                 return true;
             } else {
-                console.log('Botão de próxima página não encontrado');
-                // Tenta aguardar o botão aparecer
-                const button = await waitForElement('button', 2000);
-                if (button) {
-                    return turnPage();
-                }
+                console.log('❌ Botão de próxima página não encontrado');
                 stopAutoTurn();
                 return false;
             }
         } catch (error) {
-            console.error('Erro ao virar página:', error);
+            console.error('❌ Erro ao virar página:', error);
             return false;
         }
     }
