@@ -45,57 +45,59 @@
         });
     }
     
-    // Função para encontrar botões de navegação específicos da Árvore
+    // Função para encontrar o botão específico da Árvore
     function findNavigationButtons() {
-        const selectors = [
-            // Seletores específicos da plataforma Árvore
-            '[data-testid="next-page"]',
-            '[data-testid="page-forward"]',
-            '[aria-label*="róxima"]',
-            '[aria-label*="next"]',
-            '[title*="róxima"]',
-            '[title*="next"]',
-            'button[class*="next"]',
-            'button[class*="forward"]',
-            'button[class*="right"]',
-            '.navigation-next',
-            '.page-next',
-            '.next-btn',
-            // Seletores por ícones comuns
-            'button svg[class*="arrow"]',
-            'button svg[class*="chevron"]',
-            'button[class*="arrow-right"]',
-            'button[class*="chevron-right"]'
+        // Primeiro, tenta o seletor específico que você forneceu
+        const specificSelectors = [
+            'button.sc-lkltAP.joPNDs',
+            'button[data-testid="bonsai-icon-caret-right"]',
+            'span[data-testid="bonsai-icon-caret-right"]',
+            '[data-testid="bonsai-icon-caret-right"]'
         ];
         
-        for (let selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            for (let element of elements) {
+        for (let selector of specificSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
                 const button = element.tagName === 'BUTTON' ? element : element.closest('button');
                 if (button && !button.disabled && button.offsetParent !== null) {
+                    console.log('Botão encontrado via seletor específico:', selector);
                     return button;
                 }
             }
         }
         
-        // Busca por botões com base na posição (lado direito da tela)
-        const buttons = document.querySelectorAll('button, [role="button"]');
-        const screenWidth = window.innerWidth;
-        
-        for (let btn of buttons) {
-            const rect = btn.getBoundingClientRect();
-            const isRightSide = rect.left > screenWidth * 0.7;
-            const isVisible = rect.width > 0 && rect.height > 0;
-            const hasArrowContent = btn.innerHTML.includes('►') || 
-                                  btn.innerHTML.includes('→') || 
-                                  btn.innerHTML.includes('chevron') ||
-                                  btn.innerHTML.includes('arrow');
-            
-            if (isRightSide && isVisible && (hasArrowContent || btn.innerHTML.includes('svg'))) {
+        // Busca por classe específica sc-lkltAP
+        const scButtons = document.querySelectorAll('button[class*="sc-lkltAP"]');
+        for (let btn of scButtons) {
+            if (btn.offsetParent !== null && !btn.disabled) {
+                console.log('Botão encontrado via classe sc-lkltAP');
                 return btn;
             }
         }
         
+        // Busca por data-testid caret-right
+        const caretButtons = document.querySelectorAll('[data-testid*="caret-right"]');
+        for (let element of caretButtons) {
+            const button = element.tagName === 'BUTTON' ? element : element.closest('button');
+            if (button && !button.disabled && button.offsetParent !== null) {
+                console.log('Botão encontrado via caret-right');
+                return button;
+            }
+        }
+        
+        // Busca genérica por botões com ícone de seta para direita
+        const allButtons = document.querySelectorAll('button');
+        for (let btn of allButtons) {
+            const hasCaretIcon = btn.innerHTML.includes('caret-right') || 
+                               btn.innerHTML.includes('data-testid="bonsai-icon-caret-right"');
+            
+            if (hasCaretIcon && !btn.disabled && btn.offsetParent !== null) {
+                console.log('Botão encontrado via busca genérica');
+                return btn;
+            }
+        }
+        
+        console.log('Nenhum botão de navegação encontrado');
         return null;
     }
     
@@ -248,8 +250,24 @@
         };
         
         testButton.onclick = () => {
-            console.log('Teste de navegação...');
-            turnPage();
+            console.log('🔍 Teste de navegação...');
+            const button = findNavigationButtons();
+            if (button) {
+                console.log('✅ Botão encontrado:', button);
+                console.log('Classes:', button.className);
+                console.log('HTML:', button.innerHTML);
+                turnPage();
+            } else {
+                console.log('❌ Botão não encontrado');
+                // Debug: mostrar todos os botões disponíveis
+                const allButtons = document.querySelectorAll('button');
+                console.log('🔍 Botões disponíveis na página:', allButtons.length);
+                allButtons.forEach((btn, index) => {
+                    if (btn.innerHTML.includes('caret') || btn.className.includes('sc-')) {
+                        console.log(`Botão ${index}:`, btn.className, btn.innerHTML.substring(0, 100));
+                    }
+                });
+            }
         };
         
         closeButton.onclick = () => {
