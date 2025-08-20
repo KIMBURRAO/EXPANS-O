@@ -45,59 +45,62 @@
         });
     }
     
-    // Função para encontrar o botão específico da Árvore
+    // Função para encontrar o botão específico da Árvore (SOMENTE PRÓXIMA PÁGINA)
     function findNavigationButtons() {
-        // Primeiro, tenta o seletor específico que você forneceu
-        const specificSelectors = [
-            'button.sc-lkltAP.joPNDs',
-            'button[data-testid="bonsai-icon-caret-right"]',
+        // Primeiro, tenta o seletor específico do botão de PRÓXIMA página
+        const nextPageSelectors = [
             'span[data-testid="bonsai-icon-caret-right"]',
             '[data-testid="bonsai-icon-caret-right"]'
         ];
         
-        for (let selector of specificSelectors) {
+        for (let selector of nextPageSelectors) {
             const element = document.querySelector(selector);
             if (element) {
-                const button = element.tagName === 'BUTTON' ? element : element.closest('button');
+                const button = element.closest('button');
                 if (button && !button.disabled && button.offsetParent !== null) {
-                    console.log('Botão encontrado via seletor específico:', selector);
+                    console.log('✅ Botão PRÓXIMA encontrado via:', selector);
                     return button;
                 }
             }
         }
         
-        // Busca por classe específica sc-lkltAP
-        const scButtons = document.querySelectorAll('button[class*="sc-lkltAP"]');
-        for (let btn of scButtons) {
-            if (btn.offsetParent !== null && !btn.disabled) {
-                console.log('Botão encontrado via classe sc-lkltAP');
-                return btn;
+        // Busca por todos os spans com caret e filtra apenas RIGHT
+        const caretSpans = document.querySelectorAll('span[data-testid*="caret"]');
+        for (let span of caretSpans) {
+            // IMPORTANTE: só aceita caret-RIGHT
+            if (span.getAttribute('data-testid') === 'bonsai-icon-caret-right') {
+                const button = span.closest('button');
+                if (button && !button.disabled && button.offsetParent !== null) {
+                    console.log('✅ Botão PRÓXIMA encontrado via caret-right span');
+                    return button;
+                }
             }
         }
         
-        // Busca por data-testid caret-right
-        const caretButtons = document.querySelectorAll('[data-testid*="caret-right"]');
-        for (let element of caretButtons) {
-            const button = element.tagName === 'BUTTON' ? element : element.closest('button');
-            if (button && !button.disabled && button.offsetParent !== null) {
-                console.log('Botão encontrado via caret-right');
-                return button;
-            }
-        }
-        
-        // Busca genérica por botões com ícone de seta para direita
+        // Busca por posição: botão do lado DIREITO da tela
         const allButtons = document.querySelectorAll('button');
+        const screenWidth = window.innerWidth;
+        let rightmostButton = null;
+        let rightmostPosition = 0;
+        
         for (let btn of allButtons) {
-            const hasCaretIcon = btn.innerHTML.includes('caret-right') || 
-                               btn.innerHTML.includes('data-testid="bonsai-icon-caret-right"');
+            const rect = btn.getBoundingClientRect();
+            const isVisible = rect.width > 0 && rect.height > 0 && btn.offsetParent !== null;
+            const hasCaretIcon = btn.innerHTML.includes('caret-right');
             
-            if (hasCaretIcon && !btn.disabled && btn.offsetParent !== null) {
-                console.log('Botão encontrado via busca genérica');
-                return btn;
+            // Verifica se está na metade direita da tela E tem ícone caret-right
+            if (isVisible && rect.left > screenWidth * 0.5 && hasCaretIcon && rect.left > rightmostPosition) {
+                rightmostButton = btn;
+                rightmostPosition = rect.left;
             }
         }
         
-        console.log('Nenhum botão de navegação encontrado');
+        if (rightmostButton) {
+            console.log('✅ Botão PRÓXIMA encontrado por posição direita');
+            return rightmostButton;
+        }
+        
+        console.log('❌ Botão de PRÓXIMA página não encontrado');
         return null;
     }
     
@@ -250,22 +253,37 @@
         };
         
         testButton.onclick = () => {
-            console.log('🔍 Teste de navegação...');
+            console.log('🔍 Teste de navegação - Buscando PRÓXIMA página...');
             const button = findNavigationButtons();
             if (button) {
-                console.log('✅ Botão encontrado:', button);
+                console.log('✅ Botão PRÓXIMA encontrado:', button);
                 console.log('Classes:', button.className);
-                console.log('HTML:', button.innerHTML);
-                turnPage();
+                console.log('Posição:', button.getBoundingClientRect());
+                console.log('HTML (primeiros 200 chars):', button.innerHTML.substring(0, 200));
+                
+                // Verifica se realmente é o botão correto
+                const isRightButton = button.innerHTML.includes('caret-right');
+                const isNotLeftButton = !button.innerHTML.includes('caret-left');
+                
+                console.log('✅ É botão direita?', isRightButton);
+                console.log('✅ NÃO é botão esquerda?', isNotLeftButton);
+                
+                if (isRightButton && isNotLeftButton) {
+                    turnPage();
+                } else {
+                    console.log('⚠️ Botão pode estar incorreto - não clicando');
+                }
             } else {
-                console.log('❌ Botão não encontrado');
-                // Debug: mostrar todos os botões disponíveis
-                const allButtons = document.querySelectorAll('button');
-                console.log('🔍 Botões disponíveis na página:', allButtons.length);
-                allButtons.forEach((btn, index) => {
-                    if (btn.innerHTML.includes('caret') || btn.className.includes('sc-')) {
-                        console.log(`Botão ${index}:`, btn.className, btn.innerHTML.substring(0, 100));
-                    }
+                console.log('❌ Botão de PRÓXIMA não encontrado');
+                
+                // Debug: mostrar TODOS os botões com caret
+                const allCaretButtons = document.querySelectorAll('[data-testid*="caret"]');
+                console.log('🔍 Botões com caret encontrados:', allCaretButtons.length);
+                allCaretButtons.forEach((element, index) => {
+                    const button = element.closest('button');
+                    const testId = element.getAttribute('data-testid');
+                    const rect = element.getBoundingClientRect();
+                    console.log(`Caret ${index}: ${testId} - Posição X: ${rect.left} - Botão:`, button?.className || 'sem botão');
                 });
             }
         };
